@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>마켓인유 순환 선별기 (듀얼날짜)</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 20px; background-color: #f4f4f9; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+        .header-box { background: white; padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #ddd; }
+        .file-upload-wrapper { margin-bottom: 10px; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 14px; }
+        .setting-row input { width: 60px; padding: 5px; text-align: center; border: 1px solid #ccc; border-radius: 5px; }
+        .scan-box { display: flex; gap: 10px; margin-bottom: 15px; }
+        input[type="text"] { flex: 1; padding: 15px; font-size: 18px; border: 2px solid #007bff; border-radius: 10px; text-align: center; }
+        .list-container { flex: 1; overflow-y: auto; background: white; border-radius: 10px; padding: 10px; border: 1px solid #ddd; }
+        .list-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        
+        .status-move { background-color: #e6fffa; border-left: 5px solid #00c853; } 
+        .status-keep { background-color: #ffebee; border-left: 5px solid #ff1744; } 
+        .status-unknown { background-color: #f5f5f5; border-left: 5px solid #999; } 
+        
+        .item-left { display: flex; flex-direction: column; width: 60%; }
+        .item-barcode { font-weight: bold; font-size: 16px; color: #333; }
+        .item-detail { font-size: 13px; color: #666; margin-top: 4px; font-weight: 500;}
+        .item-meta { font-size: 12px; color: #555; margin-top: 4px; }
+        .location-tag { color: #007bff; font-weight: bold; margin-right: 5px; }
+        
+        .item-right { text-align: right; width: 40%; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
+        
+        /* 날짜 디자인 수정 */
+        .days-current { font-size: 22px; font-weight: bold; color: #333; }
+        .days-total { font-size: 12px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block;}
+        .days-total.old { background: #333; color: #fff; } /* 오래된 옷 강조 */
+
+        .badge { font-size: 11px; padding: 2px 5px; border-radius: 4px; color: white; margin-left: 5px; vertical-align: text-bottom;}
+        
+        .btn-group { margin-top: 10px; display: flex; gap: 10px; }
+        button { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-export { background-color: #007bff; }
+        .btn-reset { background-color: #dc3545; flex: 0.4; }
+        .alert-box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); color: white; display: none; justify-content: center; align-items: center; font-size: 24px; z-index: 999; text-align: center; padding: 20px; flex-direction: column;}
+    </style>
+</head>
+<body>
+
+    <div id="alertBox" class="alert-box">
+        <div id="alertMsg">알림</div>
+    </div>
+
+    <div class="header-box">
+        <div style="font-weight:bold; margin-bottom:10px; color:#28a745;">📊 엑셀 파일 업로드 (.xlsx)</div>
+        <div class="file-upload-wrapper">
+            <input type="file" id="excelFile" accept=".xlsx, .xls" onchange="handleFileUpload(this)">
+        </div>
+        <div class="setting-row">
+            <span>📅 순환 기준일(D+):</span>
+            <input type="number" id="limitDays" value="90">일 이상
+        </div>
+        <div style="font-size:12px; color:#666; margin-top:5px;">* 로드된 상품: <span id="dataCount" style="color:#007bff; font-weight:bold;">0</span>개</div>
+    </div>
+
+    <div class="scan-box">
+        <input type="text" id="barcodeInput" placeholder="바코드 스캔" autocomplete="off">
+    </div>
+
+    <div class="list-container" id="resultList">
+        <div style="text-align:center; padding:40px; color:#aaa; font-size:14px;">
+            1. '2026.01_공동판매.xlsx' 파일 업로드<br>
+            2. 현재위치일수 vs 총누적일수 동시 확인<br>
+            3. 가격 인하 여부 판단 가능
+        </div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn-reset" onclick="resetList()">🔄 초기화</button>
+        <button class="btn-export" onclick="exportMoveList()">🚚 순환 리스트 다운</button>
+    </div>
+
+    <script>
+        let masterData = {}; 
+        let scannedList = []; 
+        let inputTimer = null;
+        
+        const input = document.getElementById('barcodeInput');
+        const alertBox = document.getElementById('alertBox');
+        
+        // 한글 매핑
+        const CHO = ["r","R","s","e","E","f","a","q","Q","t","T","d","w","W","c","z","x","v","g"];
+        const JUNG = ["k","o","i","O","j","p","u","P","h","hk","ho","hl","y","n","nj","np","nl","b","m","ml","l"];
+        const JONG = ["","r","R","rt","s","sw","sg","e","f","fr","fa","fq","ft","fx","fv","fg","a","q","qt","t","T","d","w","c","z","x","v","g"];
+        const singleMap = {
+            'ㅂ':'q', 'ㅈ':'w', 'ㄷ':'e', 'ㄱ':'r', 'ㅅ':'t', 'ㅁ':'a', 'ㄴ':'s', 'ㅇ':'d', 'ㄹ':'f', 'ㅎ':'g', 
+            'ㅋ':'z', 'ㅌ':'x', 'ㅊ':'c', 'ㅍ':'v', 'ㅃ':'Q', 'ㅉ':'W', 'ㄸ':'E', 'ㄲ':'R', 'ㅆ':'T',
+            'ㅛ':'y', 'ㅕ':'u', 'ㅑ':'i', 'ㅐ':'o', 'ㅔ':'p', 'ㅗ':'h', 'ㅓ':'j', 'ㅏ':'k', 'ㅣ':'l',
+            'ㅠ':'b', 'ㅜ':'n', 'ㅡ':'m', 'ㅒ':'O', 'ㅖ':'P',
+            'ㅘ':'hk', 'ㅙ':'ho', 'ㅚ':'hl', 'ㅝ':'nj', 'ㅞ':'np', 'ㅟ':'nl', 'ㅢ':'ml'
+        };
+
+        function convertHangulToEnglish(text) {
+            if (text.normalize) text = text.normalize('NFC');
+            let result = "";
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const code = char.charCodeAt(0);
+                if (code >= 44032 && code <= 55203) {
+                    const uni = code - 44032;
+                    const cho = Math.floor(uni / 588);
+                    const jung = Math.floor((uni - (cho * 588)) / 28);
+                    const jong = uni % 28;
+                    result += CHO[cho] + JUNG[jung] + JONG[jong];
+                } else if (singleMap[char]) {
+                    result += singleMap[char];
+                } else {
+                    result += char;
+                }
+            }
+            return result.toUpperCase();
+        }
+
+        function playSound(type) {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            if (type === 'move') { 
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(523, audioCtx.currentTime); 
+                oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.15); 
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.4);
+            } else if (type === 'keep') { 
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(330, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.15);
+            } else { 
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        function getDaysDiff(dateVal) {
+            if (!dateVal) return -1;
+            const today = new Date();
+            let entryDate;
+            if (dateVal instanceof Date) {
+                entryDate = dateVal;
+            } else if (typeof dateVal === 'number') {
+                entryDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+            } else {
+                let cleanDate = String(dateVal).replace(/\./g, '-').replace(/\//g, '-').trim();
+                entryDate = new Date(cleanDate);
+            }
+            if (isNaN(entryDate)) return -1;
+            const diffTime = today - entryDate;
+            return Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
+        }
+
+        // --- 엑셀 처리 ---
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                let sheetName = '입고';
+                if (!workbook.Sheets[sheetName]) sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 'A', defval: "" });
+                parseExcelData(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseExcelData(rows) {
+            let count = 0;
+            masterData = {}; 
+            rows.forEach((row, index) => {
+                if (index < 2) return; 
+                const barcode = row['G'] ? String(row['G']).trim().toUpperCase() : "";
+                if (barcode && barcode.length > 2) {
+                    const productName = row['D'] || "상품명없음";
+                    const price = row['E'] || "0";
+                    const category = row['H'] || "기타";
+                    const location = row['B'] || "위치미정"; 
+                    
+                    // [핵심] 날짜 두 개 다 가져오기
+                    let dateCurrent = row['O']; // 현재위치 입고일
+                    let dateFirst = row['C'];   // 최초 입고일
+
+                    masterData[barcode] = {
+                        name: productName,
+                        price: price,
+                        category: category,
+                        location: location,
+                        dateCurrent: dateCurrent,
+                        dateFirst: dateFirst
+                    };
+                    count++;
+                }
+            });
+            document.getElementById('dataCount').innerText = count;
+            alert(`${count}개의 데이터를 로드했습니다!`);
+        }
+
+        function processBarcode(code) {
+            const convertedCode = convertHangulToEnglish(code);
+            input.value = '';
+
+            const itemInfo = masterData[convertedCode];
+            const limitDays = parseInt(document.getElementById('limitDays').value) || 90;
+            
+            let resultData = {
+                code: convertedCode,
+                name: '정보 없음',
+                price: '-',
+                category: '-',
+                location: '-',
+                daysCurrent: 0,
+                daysTotal: 0,
+                status: 'unknown'
+            };
+
+            if (itemInfo) {
+                // 1. 총 누적일(Total) 계산: C열 기준
+                const daysTotal = getDaysDiff(itemInfo.dateFirst);
+
+                // 2. 현재 체류일(Current) 계산: O열 기준
+                // O열이 없으면(-1), 총 누적일과 같다고 간주
+                let daysCurrent = getDaysDiff(itemInfo.dateCurrent);
+                if (daysCurrent === -1) {
+                    daysCurrent = daysTotal; 
+                }
+
+                resultData.name = itemInfo.name;
+                resultData.price = itemInfo.price;
+                resultData.category = itemInfo.category;
+                resultData.location = itemInfo.location; 
+                resultData.daysCurrent = daysCurrent;
+                resultData.daysTotal = daysTotal;
+
+                // 순환 판단은 '현재 체류일(Current)' 기준
+                if (daysCurrent >= 0) { 
+                    if (daysCurrent >= limitDays) {
+                        resultData.status = 'move'; 
+                        playSound('move');
+                        showQuickAlert(`${daysCurrent}일 됨\n(순환 대상)`);
+                    } else {
+                        resultData.status = 'keep'; 
+                        playSound('keep');
+                    }
+                } else {
+                    resultData.status = 'unknown';
+                    playSound('error');
+                    showQuickAlert('날짜 오류');
+                }
+            } else {
+                playSound('error');
+                showQuickAlert('미등록 바코드');
+            }
+
+            scannedList.unshift(resultData);
+            updateListUI();
+        }
+
+        function showQuickAlert(msg) {
+            document.getElementById('alertMsg').innerText = msg;
+            alertBox.style.display = 'flex';
+            setTimeout(() => {
+                alertBox.style.display = 'none';
+                input.focus();
+            }, 800);
+        }
+
+        function updateListUI() {
+            const listEl = document.getElementById('resultList');
+            listEl.innerHTML = scannedList.map(item => {
+                let statusText = '';
+                let badgeColor = '#999';
+                let priceFormatted = item.price;
+                if(!isNaN(item.price)) priceFormatted = Number(item.price).toLocaleString() + '원';
+
+                if(item.status === 'move') { statusText = '순환이동'; badgeColor = '#00c853'; }
+                else if(item.status === 'keep') { statusText = '매장유지'; badgeColor = '#ff1744'; }
+                else { statusText = '정보없음'; }
+
+                // [디자인] 총 누적일이 1년(365일) 넘으면 검은색 뱃지로 경고
+                let totalClass = (item.daysTotal > 365) ? 'old' : '';
+                let totalText = (item.daysTotal >= 0) ? `총 ${item.daysTotal}일` : '날짜없음';
+
+                return `
+                    <div class="list-item status-${item.status}">
+                        <div class="item-left">
+                            <span class="item-barcode">
+                                ${item.code} 
+                                <span class="badge" style="background:${badgeColor}">${statusText}</span>
+                            </span>
+                            <span class="item-detail">${item.name}</span>
+                            <span class="item-meta">
+                                <span class="location-tag">${item.location}</span>
+                                ${item.category} | ${priceFormatted}
+                            </span>
+                        </div>
+                        <div class="item-right">
+                            <span class="days-current">${item.daysCurrent >= 0 ? item.daysCurrent+'일' : '?'}</span>
+                            <span class="days-total ${totalClass}">${totalText}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function resetList() {
+            if(confirm("초기화 하시겠습니까?")) {
+                scannedList = [];
+                updateListUI();
+            }
+            input.focus();
+        }
+
+        function exportMoveList() {
+            const moveItems = scannedList.filter(item => item.status === 'move');
+            if (moveItems.length === 0) {
+                alert("순환 대상이 없습니다.");
+                return;
+            }
+            // 엑셀 다운로드 시 '현재체류일'과 '총누적일' 모두 저장
+            let csvContent = "\uFEFF바코드,위치,상품명,카테고리,금액,현재체류(일),총누적(일),상태\n";
+            moveItems.forEach(item => {
+                csvContent += `${item.code},${item.location},${item.name},${item.category},${item.price},${item.daysCurrent},${item.daysTotal},순환이동\n`;
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            const date = new Date();
+            link.setAttribute("href", url);
+            link.setAttribute("download", `순환리스트_${date.getMonth()+1}월${date.getDate()}일.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        input.addEventListener('input', function(e) {
+            clearTimeout(inputTimer);
+            inputTimer = setTimeout(() => {
+                let val = input.value.trim();
+                if(val.length > 0) processBarcode(val);
+            }, 300);
+        });
+        
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                clearTimeout(inputTimer);
+                let val = input.value.trim();
+                if(val.length > 0) processBarcode(val);
+            }
+        });
+
+        input.focus();
+    </script>
+</body>
+</html>
