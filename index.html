@@ -3,368 +3,484 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>마켓인유 순환 선별기 (듀얼날짜)</title>
+    <title>마켓인유 순환 선별기</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,500;9..40,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Apple SD Gothic Neo', sans-serif; margin: 0; padding: 20px; background-color: #f4f4f9; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
-        .header-box { background: white; padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #ddd; }
-        .file-upload-wrapper { margin-bottom: 10px; }
-        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 14px; }
-        .setting-row input { width: 60px; padding: 5px; text-align: center; border: 1px solid #ccc; border-radius: 5px; }
-        .scan-box { display: flex; gap: 10px; margin-bottom: 15px; }
-        input[type="text"] { flex: 1; padding: 15px; font-size: 18px; border: 2px solid #007bff; border-radius: 10px; text-align: center; }
-        .list-container { flex: 1; overflow-y: auto; background: white; border-radius: 10px; padding: 10px; border: 1px solid #ddd; }
-        .list-item { padding: 12px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        
-        .status-move { background-color: #e6fffa; border-left: 5px solid #00c853; } 
-        .status-keep { background-color: #ffebee; border-left: 5px solid #ff1744; } 
-        .status-unknown { background-color: #f5f5f5; border-left: 5px solid #999; } 
-        
-        .item-left { display: flex; flex-direction: column; width: 60%; }
-        .item-barcode { font-weight: bold; font-size: 16px; color: #333; }
-        .item-detail { font-size: 13px; color: #666; margin-top: 4px; font-weight: 500;}
-        .item-meta { font-size: 12px; color: #555; margin-top: 4px; }
-        .location-tag { color: #007bff; font-weight: bold; margin-right: 5px; }
-        
-        .item-right { text-align: right; width: 40%; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; }
-        
-        /* 날짜 디자인 수정 */
-        .days-current { font-size: 22px; font-weight: bold; color: #333; }
-        .days-total { font-size: 12px; color: #666; background: #eee; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block;}
-        .days-total.old { background: #333; color: #fff; } /* 오래된 옷 강조 */
+        :root {
+            --bg: #F6F1EB;
+            --card: rgba(255,255,255,0.55);
+            --card-border: rgba(255,255,255,0.7);
+            --card-solid: #FFFFFF;
+            --text-primary: #1A1A1A;
+            --text-secondary: #8A8580;
+            --text-tertiary: #BBB5AD;
+            --accent: #E8713A;
+            --accent-light: rgba(232,113,58,0.12);
+            --move: #1B9E5E;
+            --move-bg: rgba(27,158,94,0.08);
+            --keep: #D44440;
+            --keep-bg: rgba(212,68,64,0.06);
+            --unknown-bg: rgba(0,0,0,0.03);
+            --danger: #D44440;
+            --glass-blur: 20px;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+        }
+        *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+        body{font-family:'DM Sans','Apple SD Gothic Neo',sans-serif;background:var(--bg);display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;position:relative}
 
-        .badge { font-size: 11px; padding: 2px 5px; border-radius: 4px; color: white; margin-left: 5px; vertical-align: text-bottom;}
+        /* ── 배경 블롭 ── */
+        .bg-blobs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+        .blob{position:absolute;border-radius:50%;filter:blur(80px);opacity:0.5;animation:blobFloat 20s ease-in-out infinite}
+        .blob-1{width:260px;height:260px;background:radial-gradient(circle,#F0A04B 0%,#E8713A 50%,transparent 70%);top:-50px;right:-30px}
+        .blob-2{width:180px;height:180px;background:radial-gradient(circle,#F7C96E 0%,#EDB44B 50%,transparent 70%);top:35%;left:-40px;animation-delay:-7s}
+        .blob-3{width:140px;height:140px;background:radial-gradient(circle,#82C9A5 0%,#1B9E5E 50%,transparent 70%);bottom:12%;right:-10px;animation-delay:-14s;opacity:0.3}
+        @keyframes blobFloat{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(15px,-20px) scale(1.05)}66%{transform:translate(-10px,15px) scale(0.95)}}
+
+        .app{position:relative;z-index:1;display:flex;flex-direction:column;height:100%;padding:16px;gap:12px}
+
+        /* ── 헤더 카드 (글래스) ── */
+        .header-card{
+            background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+            border:1px solid var(--card-border);border-radius:var(--radius-lg);
+            padding:18px 20px;position:relative;overflow:hidden;
+        }
+        .header-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.8),transparent)}
+        .header-title{font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:14px;letter-spacing:-0.3px}
         
-        .btn-group { margin-top: 10px; display: flex; gap: 10px; }
-        button { flex: 1; padding: 15px; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; color: white; }
-        .btn-export { background-color: #007bff; }
-        .btn-reset { background-color: #dc3545; flex: 0.4; }
-        .alert-box { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); color: white; display: none; justify-content: center; align-items: center; font-size: 24px; z-index: 999; text-align: center; padding: 20px; flex-direction: column;}
+        /* 파일 업로드 */
+        .file-drop{
+            border:1.5px dashed rgba(0,0,0,0.12);border-radius:var(--radius-md);
+            padding:16px;text-align:center;cursor:pointer;transition:all 0.2s;
+            position:relative;overflow:hidden;
+        }
+        .file-drop:hover,.file-drop.dragover{border-color:var(--accent);background:var(--accent-light)}
+        .file-drop input{position:absolute;inset:0;opacity:0;cursor:pointer}
+        .file-drop-label{font-size:13px;color:var(--text-secondary);font-weight:500}
+        .file-drop-label .icon{font-size:20px;display:block;margin-bottom:4px}
+        .file-loaded{color:var(--move);font-weight:700}
+
+        /* 설정 행 */
+        .setting-row{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:13px;color:var(--text-secondary);font-weight:500}
+        .setting-row .day-input{
+            width:56px;padding:7px 4px;text-align:center;border:1.5px solid rgba(0,0,0,0.08);
+            border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;
+            color:var(--text-primary);background:var(--card-solid);transition:border-color 0.2s;
+        }
+        .setting-row .day-input:focus{outline:none;border-color:var(--accent)}
+        .data-count{font-size:11px;color:var(--text-tertiary);margin-top:10px;font-weight:500}
+        .data-count strong{color:var(--accent);font-weight:700}
+
+        /* ── 스캔 입력 ── */
+        .input-field{
+            width:100%;padding:15px 18px;font-size:16px;font-family:'DM Sans',sans-serif;font-weight:500;
+            color:var(--text-primary);border:1.5px solid rgba(0,0,0,0.08);border-radius:var(--radius-md);
+            background:var(--card-solid);text-align:center;transition:all 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.04);
+        }
+        .input-field:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light),0 2px 8px rgba(232,113,58,0.1)}
+        .input-field::placeholder{color:var(--text-tertiary);font-weight:400}
+
+        /* ── 리스트 (글래스) ── */
+        .list-card{
+            flex:1;overflow-y:auto;
+            background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+            border:1px solid var(--card-border);border-radius:var(--radius-lg);
+            position:relative;-webkit-overflow-scrolling:touch;
+        }
+        .list-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.8),transparent)}
+        .list-empty{text-align:center;padding:36px 20px;color:var(--text-tertiary);font-size:12px;font-weight:500;line-height:1.8}
+
+        .list-item{
+            padding:12px 16px;display:flex;justify-content:space-between;align-items:center;
+            border-bottom:1px solid rgba(0,0,0,0.04);gap:12px;
+        }
+        .list-item:last-child{border-bottom:none}
+
+        .list-item.st-move{background:var(--move-bg);border-left:3px solid var(--move)}
+        .list-item.st-keep{background:var(--keep-bg);border-left:3px solid var(--keep)}
+        .list-item.st-unknown{background:var(--unknown-bg);border-left:3px solid var(--text-tertiary)}
+
+        .item-left{flex:1;min-width:0}
+        .item-barcode{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text-primary)}
+        .item-badge{font-size:9px;font-weight:700;color:#fff;padding:2px 6px;border-radius:4px;margin-left:6px;letter-spacing:0.3px;vertical-align:1px}
+        .badge-move{background:var(--move)}
+        .badge-keep{background:var(--keep)}
+        .badge-unknown{background:var(--text-tertiary)}
+
+        .item-name{font-size:13px;font-weight:600;color:var(--text-primary);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .item-meta{font-size:11px;color:var(--text-secondary);margin-top:3px;font-weight:500}
+        .item-meta .loc{color:var(--accent);font-weight:700;margin-right:4px}
+
+        .item-right{text-align:right;flex-shrink:0}
+        .days-current{font-size:24px;font-weight:700;color:var(--text-primary);letter-spacing:-1px;line-height:1}
+        .days-current .unit{font-size:12px;font-weight:500;color:var(--text-secondary);margin-left:1px}
+        .days-total{font-size:10px;color:var(--text-secondary);background:rgba(0,0,0,0.05);padding:2px 8px;border-radius:4px;margin-top:5px;display:inline-block;font-weight:600}
+        .days-total.old{background:var(--text-primary);color:#fff}
+
+        /* ── 하단 버튼 ── */
+        .footer-area{display:flex;gap:10px}
+        .btn{
+            flex:1;padding:14px 12px;border:none;border-radius:var(--radius-md);
+            font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+            transition:transform 0.1s,opacity 0.15s;letter-spacing:-0.2px;
+        }
+        .btn:active{transform:scale(0.97)}
+        .btn-reset{background:rgba(0,0,0,0.05);color:var(--text-secondary);flex:0 0 auto;padding:14px 20px}
+        .btn-export{background:var(--accent);color:#fff;flex:1}
+
+        /* ── 순환 대상 알림 오버레이 ── */
+        .move-overlay{
+            position:fixed;inset:0;background:rgba(27,158,94,0.95);color:white;
+            display:none;justify-content:center;align-items:center;z-index:9999;
+            text-align:center;padding:24px;flex-direction:column;gap:10px;
+        }
+        .move-overlay.show{display:flex;animation:overlayIn 0.25s ease}
+        .error-overlay{
+            position:fixed;inset:0;background:rgba(30,28,25,0.88);color:white;
+            display:none;justify-content:center;align-items:center;z-index:9999;
+            text-align:center;padding:24px;flex-direction:column;gap:10px;
+        }
+        .error-overlay.show{display:flex;animation:overlayIn 0.25s ease}
+        @keyframes overlayIn{0%{opacity:0;transform:scale(1.03)}100%{opacity:1;transform:scale(1)}}
+        .overlay-icon{font-size:44px}
+        .overlay-title{font-size:26px;font-weight:700;line-height:1.3;white-space:pre-line;letter-spacing:-0.5px}
+        .overlay-sub{font-size:14px;opacity:0.75;font-weight:400}
+
+        /* ── 모달 ── */
+        .modal-bg{position:fixed;inset:0;background:rgba(30,28,25,0.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:none;justify-content:center;align-items:center;z-index:10000;padding:28px}
+        .modal-bg.show{display:flex;animation:modalIn 0.2s ease}
+        @keyframes modalIn{from{opacity:0}to{opacity:1}}
+        .modal-card{background:var(--card-solid);border-radius:var(--radius-lg);padding:32px 24px 22px;max-width:300px;width:100%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,0.18)}
+        .modal-msg{font-size:15px;font-weight:600;color:var(--text-primary);line-height:1.55;margin-bottom:24px;white-space:pre-line;word-break:keep-all}
+        .modal-btns{display:flex;gap:10px}
+        .modal-btn{flex:1;padding:13px 8px;border:none;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:opacity 0.15s}
+        .modal-btn:active{opacity:0.8}
+        .modal-btn-cancel{background:rgba(0,0,0,0.06);color:var(--text-secondary)}
+        .modal-btn-confirm{background:var(--text-primary);color:#fff}
+        .modal-btn-danger{background:var(--danger);color:#fff}
+        .modal-btn-ok{background:var(--text-primary);color:#fff}
+
+        /* ── 토스트 ── */
+        .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--text-primary);color:#fff;padding:10px 22px;border-radius:12px;font-size:13px;font-weight:600;opacity:0;transition:all 0.3s cubic-bezier(0.16,1,0.3,1);z-index:8000;pointer-events:none;letter-spacing:-0.2px;box-shadow:0 8px 30px rgba(0,0,0,0.15)}
+        .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+        /* ── 통계 바 ── */
+        .stats-bar{display:flex;gap:8px}
+        .stat-chip{
+            flex:1;text-align:center;padding:8px 4px;border-radius:var(--radius-sm);
+            font-size:11px;font-weight:700;letter-spacing:-0.2px;
+        }
+        .stat-chip.move-chip{background:var(--move-bg);color:var(--move)}
+        .stat-chip.keep-chip{background:var(--keep-bg);color:var(--keep)}
+        .stat-chip.total-chip{background:rgba(0,0,0,0.04);color:var(--text-secondary)}
+        .stat-chip .num{font-size:18px;display:block;margin-bottom:1px;letter-spacing:-1px}
     </style>
 </head>
 <body>
+    <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div><div class="blob blob-3"></div></div>
 
-    <div id="alertBox" class="alert-box">
-        <div id="alertMsg">알림</div>
+    <!-- 순환대상 오버레이 (녹색) -->
+    <div id="moveOverlay" class="move-overlay">
+        <div class="overlay-icon">🚚</div>
+        <div class="overlay-title" id="moveTitle">순환 대상</div>
+        <div class="overlay-sub">순환이동 리스트에 추가되었습니다</div>
     </div>
 
-    <div class="header-box">
-        <div style="font-weight:bold; margin-bottom:10px; color:#28a745;">📊 엑셀 파일 업로드 (.xlsx)</div>
-        <div class="file-upload-wrapper">
-            <input type="file" id="excelFile" accept=".xlsx, .xls" onchange="handleFileUpload(this)">
-        </div>
-        <div class="setting-row">
-            <span>📅 순환 기준일(D+):</span>
-            <input type="number" id="limitDays" value="90">일 이상
-        </div>
-        <div style="font-size:12px; color:#666; margin-top:5px;">* 로드된 상품: <span id="dataCount" style="color:#007bff; font-weight:bold;">0</span>개</div>
+    <!-- 에러/미등록 오버레이 -->
+    <div id="errorOverlay" class="error-overlay">
+        <div class="overlay-icon">⚠️</div>
+        <div class="overlay-title" id="errorTitle">알림</div>
+        <div class="overlay-sub" id="errorSub"></div>
     </div>
 
-    <div class="scan-box">
-        <input type="text" id="barcodeInput" placeholder="바코드 스캔" autocomplete="off">
-    </div>
-
-    <div class="list-container" id="resultList">
-        <div style="text-align:center; padding:40px; color:#aaa; font-size:14px;">
-            1. '공동판매.xlsx' 파일 업로드<br>
-            2. 현재위치일수 vs 총누적일수 동시 확인<br>
-            3. 가격 인하 여부 판단 가능
+    <!-- 모달 -->
+    <div id="modalBg" class="modal-bg">
+        <div class="modal-card">
+            <div class="modal-msg" id="modalMsg"></div>
+            <div class="modal-btns" id="modalBtns"></div>
         </div>
     </div>
 
-    <div class="btn-group">
-        <button class="btn-reset" onclick="resetList()">🔄 초기화</button>
-        <button class="btn-export" onclick="exportMoveList()">🚚 순환 리스트 다운</button>
+    <!-- 토스트 -->
+    <div class="toast" id="toast"></div>
+
+    <div class="app">
+
+        <!-- 헤더: 파일 업로드 + 설정 -->
+        <div class="header-card">
+            <div class="header-title">📊 순환 선별기</div>
+            <div class="file-drop" id="fileDrop">
+                <input type="file" id="excelFile" accept=".xlsx,.xls" onchange="handleFileUpload(this)">
+                <div class="file-drop-label" id="fileLabel">
+                    <span class="icon">📁</span>
+                    공동판매.xlsx 파일을 선택하세요
+                </div>
+            </div>
+            <div class="setting-row">
+                <span>순환 기준일</span>
+                <div>
+                    <input class="day-input" type="number" id="limitDays" value="90"> 일 이상
+                </div>
+            </div>
+            <div class="data-count" id="dataCountArea">로드된 상품: <strong id="dataCount">0</strong>개</div>
+        </div>
+
+        <!-- 통계 -->
+        <div class="stats-bar">
+            <div class="stat-chip total-chip"><span class="num" id="statTotal">0</span>스캔</div>
+            <div class="stat-chip move-chip"><span class="num" id="statMove">0</span>순환</div>
+            <div class="stat-chip keep-chip"><span class="num" id="statKeep">0</span>유지</div>
+        </div>
+
+        <!-- 바코드 입력 -->
+        <input class="input-field" type="text" id="barcodeInput" placeholder="바코드 스캔" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+
+        <!-- 결과 리스트 -->
+        <div class="list-card" id="resultList">
+            <div class="list-empty">
+                1. 엑셀 파일 업로드<br>
+                2. 바코드 스캔으로 체류일 확인<br>
+                3. 순환 대상만 리스트 다운로드
+            </div>
+        </div>
+
+        <!-- 하단 버튼 -->
+        <div class="footer-area">
+            <button class="btn btn-reset" onclick="resetList()">↩ 초기화</button>
+            <button class="btn btn-export" onclick="exportMoveList()">🚚 순환 리스트 다운</button>
+        </div>
     </div>
 
     <script>
-        let masterData = {}; 
-        let scannedList = []; 
-        let inputTimer = null;
-        
-        const input = document.getElementById('barcodeInput');
-        const alertBox = document.getElementById('alertBox');
-        
-        // 한글 매핑
-        const CHO = ["r","R","s","e","E","f","a","q","Q","t","T","d","w","W","c","z","x","v","g"];
-        const JUNG = ["k","o","i","O","j","p","u","P","h","hk","ho","hl","y","n","nj","np","nl","b","m","ml","l"];
-        const JONG = ["","r","R","rt","s","sw","sg","e","f","fr","fa","fq","ft","fx","fv","fg","a","q","qt","t","T","d","w","c","z","x","v","g"];
-        const singleMap = {
-            'ㅂ':'q', 'ㅈ':'w', 'ㄷ':'e', 'ㄱ':'r', 'ㅅ':'t', 'ㅁ':'a', 'ㄴ':'s', 'ㅇ':'d', 'ㄹ':'f', 'ㅎ':'g', 
-            'ㅋ':'z', 'ㅌ':'x', 'ㅊ':'c', 'ㅍ':'v', 'ㅃ':'Q', 'ㅉ':'W', 'ㄸ':'E', 'ㄲ':'R', 'ㅆ':'T',
-            'ㅛ':'y', 'ㅕ':'u', 'ㅑ':'i', 'ㅐ':'o', 'ㅔ':'p', 'ㅗ':'h', 'ㅓ':'j', 'ㅏ':'k', 'ㅣ':'l',
-            'ㅠ':'b', 'ㅜ':'n', 'ㅡ':'m', 'ㅒ':'O', 'ㅖ':'P',
-            'ㅘ':'hk', 'ㅙ':'ho', 'ㅚ':'hl', 'ㅝ':'nj', 'ㅞ':'np', 'ㅟ':'nl', 'ㅢ':'ml'
-        };
+        let masterData={}, scannedList=[], inputTimer=null;
+        const input=document.getElementById('barcodeInput');
+        const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 
-        function convertHangulToEnglish(text) {
-            if (text.normalize) text = text.normalize('NFC');
-            let result = "";
-            for (let i = 0; i < text.length; i++) {
-                const char = text[i];
-                const code = char.charCodeAt(0);
-                if (code >= 44032 && code <= 55203) {
-                    const uni = code - 44032;
-                    const cho = Math.floor(uni / 588);
-                    const jung = Math.floor((uni - (cho * 588)) / 28);
-                    const jong = uni % 28;
-                    result += CHO[cho] + JUNG[jung] + JONG[jong];
-                } else if (singleMap[char]) {
-                    result += singleMap[char];
-                } else {
-                    result += char;
-                }
-            }
-            return result.toUpperCase();
+        // ── localStorage (스캔 데이터 + 마스터 데이터) ──
+        const SCAN_KEY='marketInYou_circulation_scans';
+        const MASTER_KEY='marketInYou_circulation_master';
+
+        function saveScans(){try{localStorage.setItem(SCAN_KEY,JSON.stringify(scannedList))}catch(e){}}
+        function loadScans(){try{const s=localStorage.getItem(SCAN_KEY);if(s){scannedList=JSON.parse(s);if(scannedList.length){updateListUI();updateStats();showToast(`이전 스캔 ${scannedList.length}건 복원`)}}}catch(e){}}
+        function saveMaster(){try{localStorage.setItem(MASTER_KEY,JSON.stringify(masterData))}catch(e){}}
+        function loadMaster(){try{const s=localStorage.getItem(MASTER_KEY);if(s){masterData=JSON.parse(s);const c=Object.keys(masterData).length;if(c>0){document.getElementById('dataCount').textContent=c;document.getElementById('fileLabel').innerHTML='<span class="icon">✅</span><span class="file-loaded">데이터 로드됨 ('+c+'개)</span>'}}}catch(e){}}
+
+        // ── 페이지 이탈 방지 ──
+        window.addEventListener('beforeunload',e=>{if(scannedList.length){e.preventDefault();e.returnValue=''}});
+
+        // ── 모달 ──
+        function showModal(msg,buttons){return new Promise(resolve=>{const bg=document.getElementById('modalBg');document.getElementById('modalMsg').textContent=msg;const btns=document.getElementById('modalBtns');btns.innerHTML='';buttons.forEach(b=>{const el=document.createElement('button');el.className=`modal-btn ${b.cls||'modal-btn-ok'}`;el.textContent=b.label;el.onclick=()=>{bg.classList.remove('show');resolve(b.val);setTimeout(()=>input.focus(),50)};btns.appendChild(el)});bg.classList.add('show')})}
+        const showConfirm=msg=>showModal(msg,[{label:'취소',cls:'modal-btn-cancel',val:false},{label:'확인',cls:'modal-btn-confirm',val:true}]);
+        const showAlertModal=msg=>showModal(msg,[{label:'확인',cls:'modal-btn-ok',val:true}]);
+
+        // ── 토스트 ──
+        let toastT=null;
+        function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2000)}
+
+        // ── 오버레이 ──
+        let moveT=null,errorT=null;
+        function showMoveOverlay(msg){
+            document.getElementById('moveTitle').innerText=msg;
+            const o=document.getElementById('moveOverlay');o.classList.add('show');
+            clearTimeout(moveT);moveT=setTimeout(()=>{o.classList.remove('show');input.focus()},1200);
+        }
+        function showErrorOverlay(title,sub){
+            document.getElementById('errorTitle').innerText=title;
+            document.getElementById('errorSub').innerText=sub||'';
+            const o=document.getElementById('errorOverlay');o.classList.add('show');
+            clearTimeout(errorT);errorT=setTimeout(()=>{o.classList.remove('show');input.focus()},1000);
         }
 
-        function playSound(type) {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
-            if (type === 'move') { 
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(523, audioCtx.currentTime); 
-                oscillator.frequency.setValueAtTime(659, audioCtx.currentTime + 0.15); 
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.4);
-            } else if (type === 'keep') { 
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(330, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.15);
-            } else { 
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(150, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.3);
+        // ── 한글→영문 ──
+        const CHO=["r","R","s","e","E","f","a","q","Q","t","T","d","w","W","c","z","x","v","g"];
+        const JUNG=["k","o","i","O","j","p","u","P","h","hk","ho","hl","y","n","nj","np","nl","b","m","ml","l"];
+        const JONG=["","r","R","rt","s","sw","sg","e","f","fr","fa","fq","ft","fx","fv","fg","a","q","qt","t","T","d","w","c","z","x","v","g"];
+        const singleMap={'ㅂ':'q','ㅈ':'w','ㄷ':'e','ㄱ':'r','ㅅ':'t','ㅁ':'a','ㄴ':'s','ㅇ':'d','ㄹ':'f','ㅎ':'g','ㅋ':'z','ㅌ':'x','ㅊ':'c','ㅍ':'v','ㅃ':'Q','ㅉ':'W','ㄸ':'E','ㄲ':'R','ㅆ':'T','ㅛ':'y','ㅕ':'u','ㅑ':'i','ㅐ':'o','ㅔ':'p','ㅗ':'h','ㅓ':'j','ㅏ':'k','ㅣ':'l','ㅠ':'b','ㅜ':'n','ㅡ':'m','ㅒ':'O','ㅖ':'P','ㅘ':'hk','ㅙ':'ho','ㅚ':'hl','ㅝ':'nj','ㅞ':'np','ㅟ':'nl','ㅢ':'ml'};
+        function toEng(text){if(text.normalize)text=text.normalize('NFC');let r="";for(let i=0;i<text.length;i++){const c=text[i],code=c.charCodeAt(0);if(code>=44032&&code<=55203){const u=code-44032;r+=CHO[Math.floor(u/588)]+JUNG[Math.floor((u%588)/28)]+JONG[u%28]}else r+=singleMap[c]||c}return r.toUpperCase()}
+
+        // ── 사운드 ──
+        function playSound(type){
+            if(audioCtx.state==='suspended')audioCtx.resume();
+            const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+            o.connect(g);g.connect(audioCtx.destination);
+            if(type==='move'){
+                o.type='sine';o.frequency.setValueAtTime(523,audioCtx.currentTime);
+                o.frequency.setValueAtTime(659,audioCtx.currentTime+0.15);
+                g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.4);
+            }else if(type==='keep'){
+                o.type='triangle';o.frequency.setValueAtTime(330,audioCtx.currentTime);
+                g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.15);
+            }else{
+                o.type='sawtooth';o.frequency.setValueAtTime(150,audioCtx.currentTime);
+                g.gain.setValueAtTime(0.3,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.3);
             }
         }
 
-        function getDaysDiff(dateVal) {
-            if (!dateVal) return -1;
-            const today = new Date();
-            let entryDate;
-            if (dateVal instanceof Date) {
-                entryDate = dateVal;
-            } else if (typeof dateVal === 'number') {
-                entryDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
-            } else {
-                let cleanDate = String(dateVal).replace(/\./g, '-').replace(/\//g, '-').trim();
-                entryDate = new Date(cleanDate);
-            }
-            if (isNaN(entryDate)) return -1;
-            const diffTime = today - entryDate;
-            return Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
+        // ── 날짜 계산 ──
+        function getDaysDiff(dateVal){
+            if(!dateVal)return -1;
+            const today=new Date();let d;
+            if(dateVal instanceof Date)d=dateVal;
+            else if(typeof dateVal==='number')d=new Date(Math.round((dateVal-25569)*86400*1000));
+            else{d=new Date(String(dateVal).replace(/\./g,'-').replace(/\//g,'-').trim())}
+            if(isNaN(d))return -1;
+            return Math.floor((today-d)/(1000*60*60*24));
         }
 
-        // --- 엑셀 처리 ---
-        function handleFileUpload(input) {
-            const file = input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                let sheetName = '입고';
-                if (!workbook.Sheets[sheetName]) sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 'A', defval: "" });
-                parseExcelData(jsonData);
+        // ── 드래그&드롭 ──
+        const fileDrop=document.getElementById('fileDrop');
+        fileDrop.addEventListener('dragover',e=>{e.preventDefault();fileDrop.classList.add('dragover')});
+        fileDrop.addEventListener('dragleave',()=>fileDrop.classList.remove('dragover'));
+        fileDrop.addEventListener('drop',e=>{e.preventDefault();fileDrop.classList.remove('dragover');const f=e.dataTransfer.files[0];if(f)processFile(f)});
+
+        // ── 엑셀 처리 ──
+        function handleFileUpload(inp){const f=inp.files[0];if(f)processFile(f)}
+        function processFile(file){
+            const reader=new FileReader();
+            reader.onload=function(e){
+                const data=new Uint8Array(e.target.result);
+                const wb=XLSX.read(data,{type:'array'});
+                let sn='입고';if(!wb.Sheets[sn])sn=wb.SheetNames[0];
+                const ws=wb.Sheets[sn];
+                const rows=XLSX.utils.sheet_to_json(ws,{header:'A',defval:""});
+                parseExcelData(rows);
             };
             reader.readAsArrayBuffer(file);
         }
 
-        function parseExcelData(rows) {
-            let count = 0;
-            masterData = {}; 
-            rows.forEach((row, index) => {
-                if (index < 2) return; 
-                const barcode = row['G'] ? String(row['G']).trim().toUpperCase() : "";
-                if (barcode && barcode.length > 2) {
-                    const productName = row['D'] || "상품명없음";
-                    const price = row['E'] || "0";
-                    const category = row['H'] || "기타";
-                    const location = row['B'] || "위치미정"; 
-                    
-                    // [핵심] 날짜 두 개 다 가져오기
-                    let dateCurrent = row['O']; // 현재위치 입고일
-                    let dateFirst = row['C'];   // 최초 입고일
-
-                    masterData[barcode] = {
-                        name: productName,
-                        price: price,
-                        category: category,
-                        location: location,
-                        dateCurrent: dateCurrent,
-                        dateFirst: dateFirst
+        function parseExcelData(rows){
+            let count=0;masterData={};
+            rows.forEach((row,index)=>{
+                if(index<2)return;
+                const barcode=row['G']?String(row['G']).trim().toUpperCase():"";
+                if(barcode&&barcode.length>2){
+                    masterData[barcode]={
+                        name:row['D']||"상품명없음",
+                        price:row['E']||"0",
+                        category:row['H']||"기타",
+                        location:row['B']||"위치미정",
+                        dateCurrent:row['O'],
+                        dateFirst:row['C']
                     };
                     count++;
                 }
             });
-            document.getElementById('dataCount').innerText = count;
-            alert(`${count}개의 데이터를 로드했습니다!`);
-        }
-
-        function processBarcode(code) {
-            const convertedCode = convertHangulToEnglish(code);
-            input.value = '';
-
-            const itemInfo = masterData[convertedCode];
-            const limitDays = parseInt(document.getElementById('limitDays').value) || 90;
-            
-            let resultData = {
-                code: convertedCode,
-                name: '정보 없음',
-                price: '-',
-                category: '-',
-                location: '-',
-                daysCurrent: 0,
-                daysTotal: 0,
-                status: 'unknown'
-            };
-
-            if (itemInfo) {
-                // 1. 총 누적일(Total) 계산: C열 기준
-                const daysTotal = getDaysDiff(itemInfo.dateFirst);
-
-                // 2. 현재 체류일(Current) 계산: O열 기준
-                // O열이 없으면(-1), 총 누적일과 같다고 간주
-                let daysCurrent = getDaysDiff(itemInfo.dateCurrent);
-                if (daysCurrent === -1) {
-                    daysCurrent = daysTotal; 
-                }
-
-                resultData.name = itemInfo.name;
-                resultData.price = itemInfo.price;
-                resultData.category = itemInfo.category;
-                resultData.location = itemInfo.location; 
-                resultData.daysCurrent = daysCurrent;
-                resultData.daysTotal = daysTotal;
-
-                // 순환 판단은 '현재 체류일(Current)' 기준
-                if (daysCurrent >= 0) { 
-                    if (daysCurrent >= limitDays) {
-                        resultData.status = 'move'; 
-                        playSound('move');
-                        showQuickAlert(`${daysCurrent}일 됨\n(순환 대상)`);
-                    } else {
-                        resultData.status = 'keep'; 
-                        playSound('keep');
-                    }
-                } else {
-                    resultData.status = 'unknown';
-                    playSound('error');
-                    showQuickAlert('날짜 오류');
-                }
-            } else {
-                playSound('error');
-                showQuickAlert('미등록 바코드');
-            }
-
-            scannedList.unshift(resultData);
-            updateListUI();
-        }
-
-        function showQuickAlert(msg) {
-            document.getElementById('alertMsg').innerText = msg;
-            alertBox.style.display = 'flex';
-            setTimeout(() => {
-                alertBox.style.display = 'none';
-                input.focus();
-            }, 800);
-        }
-
-        function updateListUI() {
-            const listEl = document.getElementById('resultList');
-            listEl.innerHTML = scannedList.map(item => {
-                let statusText = '';
-                let badgeColor = '#999';
-                let priceFormatted = item.price;
-                if(!isNaN(item.price)) priceFormatted = Number(item.price).toLocaleString() + '원';
-
-                if(item.status === 'move') { statusText = '순환이동'; badgeColor = '#00c853'; }
-                else if(item.status === 'keep') { statusText = '매장유지'; badgeColor = '#ff1744'; }
-                else { statusText = '정보없음'; }
-
-                // [디자인] 총 누적일이 1년(365일) 넘으면 검은색 뱃지로 경고
-                let totalClass = (item.daysTotal > 365) ? 'old' : '';
-                let totalText = (item.daysTotal >= 0) ? `총 ${item.daysTotal}일` : '날짜없음';
-
-                return `
-                    <div class="list-item status-${item.status}">
-                        <div class="item-left">
-                            <span class="item-barcode">
-                                ${item.code} 
-                                <span class="badge" style="background:${badgeColor}">${statusText}</span>
-                            </span>
-                            <span class="item-detail">${item.name}</span>
-                            <span class="item-meta">
-                                <span class="location-tag">${item.location}</span>
-                                ${item.category} | ${priceFormatted}
-                            </span>
-                        </div>
-                        <div class="item-right">
-                            <span class="days-current">${item.daysCurrent >= 0 ? item.daysCurrent+'일' : '?'}</span>
-                            <span class="days-total ${totalClass}">${totalText}</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function resetList() {
-            if(confirm("초기화 하시겠습니까?")) {
-                scannedList = [];
-                updateListUI();
-            }
+            document.getElementById('dataCount').textContent=count;
+            document.getElementById('fileLabel').innerHTML='<span class="icon">✅</span><span class="file-loaded">'+count+'개 상품 로드 완료</span>';
+            saveMaster();
+            showToast(count+'개 데이터 로드 완료');
             input.focus();
         }
 
-        function exportMoveList() {
-            const moveItems = scannedList.filter(item => item.status === 'move');
-            if (moveItems.length === 0) {
-                alert("순환 대상이 없습니다.");
+        // ── 바코드 처리 ──
+        input.addEventListener('input',()=>{clearTimeout(inputTimer);inputTimer=setTimeout(()=>{const v=input.value.trim();if(v)processBarcode(v)},300)});
+        input.addEventListener('keypress',e=>{if(e.key==='Enter'){clearTimeout(inputTimer);const v=input.value.trim();if(v)processBarcode(v)}});
+
+        function processBarcode(code){
+            const c=toEng(code);input.value='';
+            const info=masterData[c];
+            const limit=parseInt(document.getElementById('limitDays').value)||90;
+
+            let result={code:c,name:'정보 없음',price:'-',category:'-',location:'-',daysCurrent:0,daysTotal:0,status:'unknown',time:new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})};
+
+            if(info){
+                const daysTotal=getDaysDiff(info.dateFirst);
+                let daysCurrent=getDaysDiff(info.dateCurrent);
+                if(daysCurrent===-1)daysCurrent=daysTotal;
+
+                result.name=info.name;result.price=info.price;result.category=info.category;
+                result.location=info.location;result.daysCurrent=daysCurrent;result.daysTotal=daysTotal;
+
+                if(daysCurrent>=0){
+                    if(daysCurrent>=limit){
+                        result.status='move';playSound('move');
+                        showMoveOverlay(`${daysCurrent}일 경과\n순환 대상`);
+                    }else{
+                        result.status='keep';playSound('keep');
+                    }
+                }else{
+                    result.status='unknown';playSound('error');
+                    showErrorOverlay('날짜 오류','입고일 데이터를 확인해주세요');
+                }
+            }else{
+                playSound('error');
+                showErrorOverlay('미등록 바코드',c);
+            }
+
+            scannedList.unshift(result);
+            updateListUI();updateStats();saveScans();
+        }
+
+        // ── 통계 ──
+        function updateStats(){
+            const m=scannedList.filter(i=>i.status==='move').length;
+            const k=scannedList.filter(i=>i.status==='keep').length;
+            document.getElementById('statTotal').textContent=scannedList.length;
+            document.getElementById('statMove').textContent=m;
+            document.getElementById('statKeep').textContent=k;
+        }
+
+        // ── 리스트 UI ──
+        function updateListUI(){
+            const el=document.getElementById('resultList');
+            if(!scannedList.length){
+                el.innerHTML='<div class="list-empty">1. 엑셀 파일 업로드<br>2. 바코드 스캔으로 체류일 확인<br>3. 순환 대상만 리스트 다운로드</div>';
                 return;
             }
-            // 엑셀 다운로드 시 '현재체류일'과 '총누적일' 모두 저장
-            let csvContent = "\uFEFF바코드,위치,상품명,카테고리,금액,현재체류(일),총누적(일),상태\n";
-            moveItems.forEach(item => {
-                csvContent += `${item.code},${item.location},${item.name},${item.category},${item.price},${item.daysCurrent},${item.daysTotal},순환이동\n`;
-            });
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            const date = new Date();
-            link.setAttribute("href", url);
-            link.setAttribute("download", `순환리스트_${date.getMonth()+1}월${date.getDate()}일.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-        
-        input.addEventListener('input', function(e) {
-            clearTimeout(inputTimer);
-            inputTimer = setTimeout(() => {
-                let val = input.value.trim();
-                if(val.length > 0) processBarcode(val);
-            }, 300);
-        });
-        
-        input.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                clearTimeout(inputTimer);
-                let val = input.value.trim();
-                if(val.length > 0) processBarcode(val);
-            }
-        });
+            el.innerHTML=scannedList.map(item=>{
+                let badgeCls='badge-unknown',badgeTxt='정보없음';
+                if(item.status==='move'){badgeCls='badge-move';badgeTxt='순환'}
+                else if(item.status==='keep'){badgeCls='badge-keep';badgeTxt='유지'}
 
+                let priceFmt=item.price;
+                if(!isNaN(item.price)&&item.price!=='-')priceFmt=Number(item.price).toLocaleString()+'원';
+
+                const totalCls=item.daysTotal>365?'old':'';
+                const totalTxt=item.daysTotal>=0?`총 ${item.daysTotal}일`:'날짜없음';
+
+                return `<div class="list-item st-${item.status}">
+                    <div class="item-left">
+                        <div><span class="item-barcode">${item.code}</span><span class="item-badge ${badgeCls}">${badgeTxt}</span></div>
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-meta"><span class="loc">${item.location}</span>${item.category} · ${priceFmt}</div>
+                    </div>
+                    <div class="item-right">
+                        <div class="days-current">${item.daysCurrent>=0?item.daysCurrent:'?'}<span class="unit">일</span></div>
+                        <div class="days-total ${totalCls}">${totalTxt}</div>
+                    </div>
+                </div>`;
+            }).join('');
+            input.focus();
+        }
+
+        // ── 초기화 ──
+        async function resetList(){
+            if(!scannedList.length)return input.focus();
+            if(await showConfirm(`스캔 기록 ${scannedList.length}건을\n모두 초기화할까요?`)){
+                scannedList=[];updateListUI();updateStats();saveScans();showToast('초기화 완료');
+            }
+        }
+
+        // ── CSV 내보내기 ──
+        async function exportMoveList(){
+            const moveItems=scannedList.filter(i=>i.status==='move');
+            if(!moveItems.length)return showAlertModal('순환 대상이 없습니다.');
+            let csv="\uFEFF바코드,위치,상품명,카테고리,금액,현재체류(일),총누적(일),스캔시간,상태\n";
+            moveItems.forEach(i=>{csv+=`${i.code},${i.location},${i.name},${i.category},${i.price},${i.daysCurrent},${i.daysTotal},${i.time||''},순환이동\n`});
+            const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+            const a=document.createElement('a'),d=new Date();
+            a.href=URL.createObjectURL(blob);
+            a.download=`순환리스트_${d.getMonth()+1}월${d.getDate()}일.csv`;
+            document.body.appendChild(a);a.click();document.body.removeChild(a);
+            showToast(`순환 ${moveItems.length}건 다운로드 완료`);
+        }
+
+        // ── 초기화 ──
+        loadMaster();
+        loadScans();
         input.focus();
     </script>
 </body>
